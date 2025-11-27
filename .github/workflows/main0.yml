@@ -8,11 +8,11 @@ on:
 jobs:
   ssh-server:
     runs-on: ubuntu-22.04
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-    
+
     - name: Install SSH Server and Rust
       run: |
         sudo apt-get update
@@ -21,19 +21,18 @@ jobs:
         # Install Rust and Cargo
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         source $HOME/.cargo/env
-    
+
     - name: Install Bore CLI using Cargo
       run: |
         source $HOME/.cargo/env
         cargo install bore-cli
-        
+
     - name: Configure Passwordless SSH Server
       run: |
         sudo tee /etc/ssh/sshd_config > /dev/null <<EOF
 Port 22
 Protocol 2
 
-# --- LOGIN POR SENHA VAZIA FUNCIONANDO ---
 PasswordAuthentication yes
 PermitEmptyPasswords yes
 UsePAM no
@@ -48,14 +47,14 @@ X11Forwarding yes
 PrintMotd yes
 Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
-        
+
     - name: Create Users with Empty Passwords
       run: |
         sudo passwd -d root
-        
+
         sudo useradd -m -s /bin/bash topuser
         sudo passwd -d topuser
-        
+
         sudo usermod -aG sudo topuser
         echo 'topuser ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/topuser
         sudo chmod 440 /etc/sudoers.d/topuser
@@ -68,26 +67,26 @@ EOF
 
         echo "🔍 SSH Status:"
         sudo systemctl status ssh --no-pager
-        
-        echo "🔍 Testing login sem senha:"
+
+        echo "🔍 Teste login sem senha:"
         echo "" | ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=yes topuser@localhost "echo OK" || echo "Falhou"
 
     - name: Start Bore Tunnel
       run: |
         source $HOME/.cargo/env
         echo "🚀 Starting bore tunnel for SSH..."
-        
+
         $HOME/.cargo/bin/bore local 22 --to bore.pub > bore_output.txt 2>&1 &
         sleep 15
-        
+
         echo "========================================"
         echo "🎯 SSH SERVER IS READY!"
         echo "========================================"
-        
+
         cat bore_output.txt || true
-        
+
         PORT=$(grep -oE "bore\.pub:[0-9]+" bore_output.txt | cut -d: -f2)
-        
+
         if [ ! -z "$PORT" ]; then
           echo ""
           echo "🌐 SSH sem senha:"
@@ -98,7 +97,7 @@ EOF
         else
           echo "⚠️ Não consegui pegar a porta do Bore"
         fi
-        
+
         echo "========================================"
         echo "🔄 Mantendo o servidor ativo por 6 horas..."
         sleep 21600
