@@ -36,22 +36,22 @@ jobs:
         Port 22
         Protocol 2
 
-# Use public-key authentication only
-PasswordAuthentication no
-PermitEmptyPasswords no
-UsePAM yes
-PubkeyAuthentication yes
-ChallengeResponseAuthentication no
+        # Use public-key authentication only
+        PasswordAuthentication no
+        PermitEmptyPasswords no
+        UsePAM yes
+        PubkeyAuthentication yes
+        ChallengeResponseAuthentication no
 
-# For safety, disable root login by default
-PermitRootLogin no
-StrictModes yes
-AllowUsers topuser
+        # For safety, disable root login by default
+          PermitRootLogin no
+          StrictModes yes
+          AllowUsers topuser
 
-X11Forwarding no
-PrintMotd no
-Subsystem sftp /usr/lib/openssh/sftp-server
-EOF
+          X11Forwarding no
+          PrintMotd no
+          Subsystem sftp /usr/lib/openssh/sftp-server
+          EOF
 
     - name: Create topuser and install public key
       env:
