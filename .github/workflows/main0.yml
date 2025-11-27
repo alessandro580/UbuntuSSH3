@@ -1,4 +1,4 @@
-name: Anonymous Passwordless SSH Server with Bore.pub
+name: Secure SSH Server with Bore.pub (keys only)
 
 on:
   workflow_dispatch:
@@ -13,91 +13,95 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install SSH Server and Rust
+    - name: Install prerequisites and Rust
       run: |
         sudo apt-get update
         sudo apt-get install -y openssh-server curl build-essential
 
-        # Install Rust and Cargo
+        # Install Rust (cargo)
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         source $HOME/.cargo/env
 
     - name: Install Bore CLI using Cargo
       run: |
         source $HOME/.cargo/env
-        cargo install bore-cli
+        cargo install bore-cli || true
 
-    - name: Configure Passwordless SSH Server
+    - name: Configure SSH (keys only)
+      env:
+        SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
       run: |
-        sudo tee /etc/ssh/sshd_config > /dev/null <<EOF
+        # Write secure sshd_config (NO empty passwords)
+        sudo tee /etc/ssh/sshd_config > /dev/null <<'EOF'
 Port 22
 Protocol 2
 
-PasswordAuthentication yes
-PermitEmptyPasswords yes
-UsePAM no
-PubkeyAuthentication no
+# Use public-key authentication only
+PasswordAuthentication no
+PermitEmptyPasswords no
+UsePAM yes
+PubkeyAuthentication yes
 ChallengeResponseAuthentication no
 
-PermitRootLogin yes
-StrictModes no
-AllowUsers *
+# For safety, disable root login by default
+PermitRootLogin no
+StrictModes yes
+AllowUsers topuser
 
-X11Forwarding yes
-PrintMotd yes
+X11Forwarding no
+PrintMotd no
 Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
 
-    - name: Create Users with Empty Passwords
+    - name: Create topuser and install public key
+      env:
+        SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
       run: |
-        sudo passwd -d root
+        # create user if not exists
+        if ! id -u topuser >/dev/null 2>&1; then
+          sudo useradd -m -s /bin/bash topuser
+        fi
 
-        sudo useradd -m -s /bin/bash topuser
-        sudo passwd -d topuser
+        # create .ssh and add public key from secret
+        sudo -u topuser mkdir -p /home/topuser/.ssh
+        sudo -u topuser chmod 700 /home/topuser/.ssh
 
+        if [ -n "${SSH_PUBLIC_KEY}" ]; then
+          echo "${SSH_PUBLIC_KEY}" | sudo -u topuser tee /home/topuser/.ssh/authorized_keys > /dev/null
+          sudo -u topuser chmod 600 /home/topuser/.ssh/authorized_keys
+        else
+          echo "ERROR: SSH_PUBLIC_KEY secret is empty. Add your SSH public key to repository secrets."
+          exit 1
+        fi
+
+        # optionally add topuser to sudo (comment out if you don't want sudo)
         sudo usermod -aG sudo topuser
         echo 'topuser ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/topuser
         sudo chmod 440 /etc/sudoers.d/topuser
 
-    - name: Start SSH Service
+    - name: Start SSH service
       run: |
         sudo ssh-keygen -A
         sudo systemctl enable ssh
         sudo systemctl restart ssh
+        echo "SSH service status:"
+        sudo systemctl is-active ssh
 
-        echo "🔍 SSH Status:"
-        sudo systemctl status ssh --no-pager
-
-        echo "🔍 Teste login sem senha:"
-        echo "" | ssh -o StrictHostKeyChecking=no -o PasswordAuthentication=yes topuser@localhost "echo OK" || echo "Falhou"
-
-    - name: Start Bore Tunnel
+    - name: Start Bore tunnel and show connection
       run: |
         source $HOME/.cargo/env
-        echo "🚀 Starting bore tunnel for SSH..."
-
+        echo "Starting bore local 22 -> bore.pub"
         $HOME/.cargo/bin/bore local 22 --to bore.pub > bore_output.txt 2>&1 &
-        sleep 15
-
-        echo "========================================"
-        echo "🎯 SSH SERVER IS READY!"
-        echo "========================================"
-
+        sleep 12
         cat bore_output.txt || true
 
-        PORT=$(grep -oE "bore\.pub:[0-9]+" bore_output.txt | cut -d: -f2)
-
-        if [ ! -z "$PORT" ]; then
-          echo ""
-          echo "🌐 SSH sem senha:"
-          echo "   ssh root@bore.pub -p ${PORT}"
-          echo "   ssh topuser@bore.pub -p ${PORT}"
-          echo ""
-          echo "👉 Quando pedir senha: apenas aperte ENTER"
+        PORT=$(grep -oE "bore\.pub:[0-9]+" bore_output.txt | cut -d: -f2 || true)
+        if [ -n "$PORT" ]; then
+          echo "SSH connection info:"
+          echo "ssh -i <PATH_TO_YOUR_PRIVATE_KEY> topuser@bore.pub -p ${PORT}"
         else
-          echo "⚠️ Não consegui pegar a porta do Bore"
+          echo "Could not extract port from bore output. See bore_output.txt above."
         fi
 
-        echo "========================================"
-        echo "🔄 Mantendo o servidor ativo por 6 horas..."
+        # Keep job running for 6 hours so the tunnel stays up
         sleep 21600
