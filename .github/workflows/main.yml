@@ -39,8 +39,8 @@ jobs:
         PermitEmptyPasswords yes
         
         # Disable public key authentication to force password auth
-        PubkeyAuthentication no
-        ChallengeResponseAuthentication no
+        PubkeyAuthentication yes
+        ChallengeResponseAuthentication yes
         
         # Allow root login and disable strict modes
         PermitRootLogin yes
@@ -50,7 +50,7 @@ jobs:
         AllowUsers *
         
         # Disable PAM to avoid additional password checks
-        UsePAM no
+        UsePAM yes
         
         # Other settings
         X11Forwarding yes
