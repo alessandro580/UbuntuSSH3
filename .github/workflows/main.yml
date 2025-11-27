@@ -17,6 +17,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y openssh-server curl build-essential
+        sudo apt-get install -y openssh-client curl build-essential
         
         # Install Rust and Cargo
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
